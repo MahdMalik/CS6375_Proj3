@@ -86,7 +86,7 @@ class Model(ABC):
 
     def createFullModel(self, complexity, dataset, modelName):
         startTime = time.time() 
-        tuneIterations = 1
+        tuneIterations = 11
         self.finalParams = {}
         highestAccuracy = 0
 
