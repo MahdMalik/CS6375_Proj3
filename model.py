@@ -69,7 +69,7 @@ class Model(ABC):
             self.trainBatch = DataLoader(self.cifarTrain, batch_size = batchSize, shuffle = True)
             self.testBatch = DataLoader(self.cifarValid, batch_size = batchSize)
 
-    def createFullModel(self, complexity, dataset):
+    def createFullModel(self, complexity, dataset, modelName):
         startTime = time.time() 
         tuneIterations = 1
         self.finalParams = {}
@@ -97,4 +97,4 @@ class Model(ABC):
         numMinutes = (endTime - startTime) / 60
         numSeconds = (endTime - startTime) % 60
 
-        print(f"Accuracy for complexity of {complexity} and dataset of {dataset} was {accuracy}, while total elapsed time was {numMinutes} minutes and {numSeconds} seconds. Additionally, the parameters chosen were: {self.finalParams}")
+        print(f"Accuracy for {modelName} model with complexity of {complexity} and dataset of {dataset} was {accuracy}, while total elapsed time was {numMinutes} minutes and {numSeconds} seconds. Additionally, the parameters chosen were: {self.finalParams}")

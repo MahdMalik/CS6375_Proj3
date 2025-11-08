@@ -133,7 +133,7 @@ class CNN(nn.Module):
         self.model = nn.Sequential(*layers)
 
         self.criterion = nn.CrossEntropyLoss()
-        self.num_epochs = 50
+        self.num_epochs = 30
 
         if(optimizer == "adam"):
             self.optimizer = optim.Adam(self.parameters(), lr = learningRate)
