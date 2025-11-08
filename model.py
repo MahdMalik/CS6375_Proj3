@@ -17,8 +17,8 @@ class Model(ABC):
             (xTrain, yTrain), (xTest, yTest) = cifar10.load_data()
 
         # normalizing them. Converting pixel values between 0 - 255 to 0 - 1
-        xTrain /= 255.0
-        xTest /= 255.0
+        xTrain = xTrain.astype('flaot32') / 255.0
+        xTest = xTest.astype('float32') / 255.0
 
         return (xTrain, yTrain, xTest, yTest)
             
