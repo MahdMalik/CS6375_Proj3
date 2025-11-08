@@ -71,11 +71,11 @@ class Model(ABC):
 
     def createFullModel(self, complexity, dataset):
         startTime = time.time() 
-        numValuesUsed = 16
+        tuneIterations = 1
         self.finalParams = {}
         highestAccuracy = 0
 
-        for _ in range(0, numValuesUsed, 1):
+        for _ in range(0, tuneIterations, 1):
             sampledParams = self.sampleParams()
 
             self.doModelCreation(complexity, dataset, sampledParams)
