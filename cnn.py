@@ -25,14 +25,14 @@ class CNN_Manager(Model):
 
         self.createTensorsAndSplitting()
 
-    def doModelCreation(self, complexity, dataset, sampledParams):
+    def doModelCreation(self, complexity, dataset, sampledParams):        
         # firest dimension is # of points, so the one after is the number of features
         if(dataset == "mnist"):
             numChannels = 1
         else:
             numChannels = 3
         
-        self.currentModel = CNN(complexity, numChannels, **sampledParams)
+        self.currentModel = CNN(complexity, numChannels, **sampledParams).to(self.device)
 
 class CNN(nn.Module):
     def __init__(self, complexity, numChannels, learningRate, optimizer, dropoutRate, batchSize):
@@ -120,12 +120,13 @@ class CNN(nn.Module):
 
             finalNumFilters = numFiltersThirdLayer
 
-        layers.append(nn.flatten())
+        layers.append(nn.Flatten())
         layers.append(nn.Linear(finalNumFilters, finalNumFilters * 2))
         layers.append(nn.ReLU())
 
-        # first, remove on hidden layers
-        layers.append(nn.Dropout(dropoutRate))
+        if(complexity != "low"):
+            # apply dropout before the final layer
+            layers.append(nn.Dropout(dropoutRate))
 
         numClasses = 10
         layers.append(nn.Linear(finalNumFilters * 2, numClasses))
@@ -133,7 +134,6 @@ class CNN(nn.Module):
         self.model = nn.Sequential(*layers)
 
         self.criterion = nn.CrossEntropyLoss()
-        self.num_epochs = 30
 
         if(optimizer == "adam"):
             self.optimizer = optim.Adam(self.parameters(), lr = learningRate)
@@ -143,9 +143,16 @@ class CNN(nn.Module):
     def forward(self, x):
         return self.model(x)
     
-    def trainAndEvaluate(self, trainSet, testSet):
-        for epoch in range(self.num_epochs):
+    def trainAndEvaluate(self, trainSet, testSet, finalTrain, device):
+        if(finalTrain):
+            numEpochs = 50
+        else:
+            numEpochs = 30
+        
+        for epoch in range(numEpochs):
             for batchX, batchY in trainSet:
+                batchX, batchY = batchX.to(device), batchY.to(device)
+                
                 # zero out gradients
                 self.optimizer.zero_grad()
 
@@ -162,6 +169,7 @@ class CNN(nn.Module):
         numTotal = 0
         with torch.no_grad():
             for batchX, batchY in testSet:
+                batchX, batchY = batchX.to(device), batchY.to(device)
                 output = self(batchX)
                 predictedOutputs = torch.argmax(output, dim = 1)
 

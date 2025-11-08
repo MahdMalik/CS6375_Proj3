@@ -31,14 +31,14 @@ class MLP_Manager(Model):
 
         self.createTensorsAndSplitting()
 
-    def doModelCreation(self, complexity, dataset, sampledParams):
+    def doModelCreation(self, complexity, dataset, sampledParams):        
         # firest dimension is # of points, so the one after is the number of features
         if(dataset == "mnist"):
             numFeatures = self.mnistXTrain.shape[1]
         else:
             numFeatures = self.cifarXTrain.shape[1]
         
-        self.currentModel = MLP(complexity, numFeatures, **sampledParams)
+        self.currentModel = MLP(complexity, numFeatures, **sampledParams).to(self.device)
 
 
 class MLP(nn.Module):
@@ -90,7 +90,7 @@ class MLP(nn.Module):
 
             beforeHiddenLayerLength = numPerceptronsSixth
     
-        # first, remove on hidden layers
+        # apply dropout before the final layer
         layers.append(nn.Dropout(dropoutRate))
         
         # now do the final layer
@@ -100,7 +100,6 @@ class MLP(nn.Module):
         self.model = nn.Sequential(*layers)
 
         self.criterion = nn.CrossEntropyLoss()
-        self.num_epochs = 30
 
         if(optimizer == "adam"):
             self.optimizer = optim.Adam(self.parameters(), lr = learningRate)
@@ -110,9 +109,16 @@ class MLP(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-    def trainAndEvaluate(self, trainSet, testSet):
-        for epoch in range(self.num_epochs):
+    def trainAndEvaluate(self, trainSet, testSet, finalTrain, device):
+        if(finalTrain):
+            numEpochs = 50
+        else:
+            numEpochs = 30
+        
+        for epoch in range(numEpochs):
             for batchX, batchY in trainSet:
+                batchX, batchY = batchX.to(device), batchY.to(device)
+                
                 # zero out gradients
                 self.optimizer.zero_grad()
 
@@ -129,6 +135,7 @@ class MLP(nn.Module):
         numTotal = 0
         with torch.no_grad():
             for batchX, batchY in testSet:
+                batchX, batchY = batchX.to(device), batchY.to(device)
                 output = self(batchX)
                 predictedOutputs = torch.argmax(output, dim = 1)
 

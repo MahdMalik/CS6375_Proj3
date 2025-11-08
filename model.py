@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from tensorflow.keras.datasets import mnist, cifar10
 import random
 import time
-from torch.utils.data import TensorDataset, DataLoader, random_split
+from torch.utils.data import TensorDataset, DataLoader, random_split, ConcatDataset
 import torch
 
 
@@ -34,6 +34,8 @@ class Model(ABC):
             "dropoutRate": [0.2, 0.5]
         }
 
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     def sampleParams(self):
         return {key: random.choice(values) for key, values in self.parameters.items()}
     
@@ -52,6 +54,9 @@ class Model(ABC):
         mnistTrain = TensorDataset(self.mnistXTrain, self.mnistYTrain)
         cifarTrain = TensorDataset(self.cifarXTrain, self.cifarYTrain)
 
+        self.mnistTest = TensorDataset(self.mnistXTest, self.mnistYTest)
+        self.cifarTest = TensorDataset(self.cifarXTest, self.cifarYTest)
+
         self.mnistTrain, self.mnistValid = random_split(mnistTrain, [50000, 10000])
 
         self.cifarTrain, self.cifarValid = random_split(cifarTrain, [45000, 5000])
@@ -60,14 +65,24 @@ class Model(ABC):
     def doModelCreation(self, complexity, dataset, sampledParams):
         pass
 
-    def createBatches(self, batchSize, dataset):
+    def createBatches(self, batchSize, dataset, doingFinalTrain):
         
         if(dataset == "mnist"):
-            self.trainBatch = DataLoader(self.mnistTrain, batch_size = batchSize, shuffle = True)
-            self.testBatch = DataLoader(self.mnistValid, batch_size = batchSize)
+            if(doingFinalTrain):
+                mergedTrain = ConcatDataset([self.mnistTrain, self.mnistValid])
+                self.trainBatch = DataLoader(mergedTrain, batch_size = batchSize, shuffle = True)
+                self.testBatch = DataLoader(self.mnistTest, batch_size = batchSize)
+            else:
+                self.trainBatch = DataLoader(self.mnistTrain, batch_size = batchSize, shuffle = True)
+                self.testBatch = DataLoader(self.mnistValid, batch_size = batchSize)
         else:
-            self.trainBatch = DataLoader(self.cifarTrain, batch_size = batchSize, shuffle = True)
-            self.testBatch = DataLoader(self.cifarValid, batch_size = batchSize)
+            if(doingFinalTrain):
+                mergedTrain = ConcatDataset([self.cifarTrain, self.cifarValid])
+                self.trainBatch = DataLoader(mergedTrain, batch_size = batchSize, shuffle = True)
+                self.testBatch = DataLoader(self.cifarTest, batch_size = batchSize)
+            else:
+                self.trainBatch = DataLoader(self.cifarTrain, batch_size = batchSize, shuffle = True)
+                self.testBatch = DataLoader(self.cifarValid, batch_size = batchSize)
 
     def createFullModel(self, complexity, dataset, modelName):
         startTime = time.time() 
@@ -80,17 +95,18 @@ class Model(ABC):
 
             self.doModelCreation(complexity, dataset, sampledParams)
 
-            self.createBatches(sampledParams["batchSize"], dataset)
+            self.createBatches(sampledParams["batchSize"], dataset, False)
 
-            accuracy = self.currentModel.trainAndEvaluate(self.trainBatch, self.testBatch)
+            accuracy = self.currentModel.trainAndEvaluate(self.trainBatch, self.testBatch, False, self.device)
 
             if(accuracy > highestAccuracy):
                 highestAccuracy = accuracy
                 self.finalParams = sampledParams
         
         self.doModelCreation(complexity, dataset, self.finalParams)
-        self.createBatches(self.finalParams["batchSize"], dataset)
-        accuracy = self.currentModel.trainAndEvaluate(self.trainBatch, self.testBatch)
+
+        self.createBatches(self.finalParams["batchSize"], dataset, True)
+        accuracy = self.currentModel.trainAndEvaluate(self.trainBatch, self.testBatch, True, self.device)
 
         endTime = time.time()
 
