@@ -25,6 +25,7 @@ class CNN_Manager(Model):
 
         self.createTensorsAndSplitting()
 
+    # this function creates the CNNmodel according to the parameters, complexity, and dataset
     def doModelCreation(self, complexity, dataset, sampledParams):        
         # firest dimension is # of points, so the one after is the number of features
         if(dataset == "mnist"):
@@ -34,6 +35,7 @@ class CNN_Manager(Model):
         
         self.currentModel = CNN(complexity, numChannels, **sampledParams).to(self.device)
 
+# class for the CNN
 class CNN(nn.Module):
     def __init__(self, complexity, numChannels, learningRate, optimizer, dropoutRate, batchSize):
         super().__init__()
@@ -41,6 +43,7 @@ class CNN(nn.Module):
         
         finalNumFilters = 0
 
+        # if complexit low, create our fisrst layer, pool layer, then the second layer, and then the final pooling
         if(complexity == "low"):
             numFiltersFirstLayer = 32
             convStepSize = 1
@@ -63,6 +66,7 @@ class CNN(nn.Module):
             layers.append(nn.AdaptiveAvgPool2d(1))
             
             finalNumFilters = numFiltersSecondLayer
+        # if emdium compelxtiy, add in batch norms, make the first layer, then the pooling, then second layer, adn then the final pooling
         elif(complexity == "medium"):
             numFiltersFirstLayer = 32
             convStepSize = 1
@@ -87,6 +91,7 @@ class CNN(nn.Module):
             layers.append(nn.AdaptiveAvgPool2d(1))
             
             finalNumFilters = numFiltersSecondLayer
+        # if high coimplexity, make first layer, then pool layer, then 2nd, then pool, then third layer, then the final pool
         elif(complexity == "high"):
             numFiltersFirstLayer = 32
             convStepSize = 1
@@ -120,62 +125,79 @@ class CNN(nn.Module):
 
             finalNumFilters = numFiltersThirdLayer
 
+        # send them all to a fully connected layer
         layers.append(nn.Flatten())
         layers.append(nn.Linear(finalNumFilters, finalNumFilters * 2))
         layers.append(nn.ReLU())
 
+        # add in dropout for all CNNs beside the basic one
         if(complexity != "low"):
             # apply dropout before the final layer
             layers.append(nn.Dropout(dropoutRate))
 
         numClasses = 10
+        # the final layer that we have
         layers.append(nn.Linear(finalNumFilters * 2, numClasses))
 
         self.model = nn.Sequential(*layers)
 
         self.criterion = nn.CrossEntropyLoss()
 
+        # change optimizer based on whats requested
         if(optimizer == "adam"):
             self.optimizer = optim.Adam(self.parameters(), lr = learningRate)
         else:
             self.optimizer = optim.SGD(self.parameters(), lr = learningRate)
     
+    # for the forward pass, no extra code is needed
     def forward(self, x):
         return self.model(x)
     
+    # train the model through various epochs
     def trainAndEvaluate(self, trainSet, testSet, finalTrain, device):
+        # i decided when we're just validating, fewer epochs may be needed
         if(finalTrain):
             numEpochs = 50
         else:
             numEpochs = 30
         
+        # loop through epochs
         for epoch in range(numEpochs):
             for batchX, batchY in trainSet:
+                # convert them go GPU
                 batchX, batchY = batchX.to(device), batchY.to(device)
                 
                 # zero out gradients
                 self.optimizer.zero_grad()
 
+                # get the results
                 rawOutputs = self(batchX)
 
+                # get the loss
                 loss = self.criterion(rawOutputs, batchY)
 
-                # do backward step
+                # do backward step to get the loss for the rest of the nodes
                 loss.backward()
 
+                # tweaks naad changes the error according to the loss gradient
                 self.optimizer.step()
 
+        # evaluate section
         numCorrect = 0
         numTotal = 0
         with torch.no_grad():
             for batchX, batchY in testSet:
                 batchX, batchY = batchX.to(device), batchY.to(device)
+                # get outputs
                 output = self(batchX)
+                # get outputs by whichver one gets the max
                 predictedOutputs = torch.argmax(output, dim = 1)
 
+                # for each batch, check the accuracy this way
                 for i in range(0, len(predictedOutputs), 1):
                     if(predictedOutputs[i] == batchY[i]):
                         numCorrect += 1
                     numTotal += 1
 
+        # obvious way to get accuracy
         return numCorrect / numTotal

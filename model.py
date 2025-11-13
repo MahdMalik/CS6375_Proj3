@@ -27,6 +27,7 @@ class Model(ABC):
         (self.mnistXTrain, self.mnistYTrain, self.mnistXTest, self.mnistYTest) = self.retrieveDataset("mnist")
         (self.cifarXTrain, self.cifarYTrain, self.cifarXTest, self.cifarYTest) = self.retrieveDataset("cifar")
 
+        # all the parameters we can choose form
         self.parameters = {
             "learningRate": [0.01, 0.001, 0.0001],
             "batchSize": [32, 64, 128],
@@ -34,11 +35,14 @@ class Model(ABC):
             "dropoutRate": [0.2, 0.5]
         }
 
+        # trying to use the GPU if possible, ependeing on where we run it
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # this allows us to randomly sample from each parameter
     def sampleParams(self):
         return {key: random.choice(values) for key, values in self.parameters.items()}
     
+    # create the tensors for each array, as well as TensorDatasets
     def createTensorsAndSplitting(self):
         self.mnistXTrain = torch.tensor(self.mnistXTrain, dtype=torch.float32)
         self.mnistXTest = torch.tensor(self.mnistXTest, dtype=torch.float32)
@@ -57,16 +61,18 @@ class Model(ABC):
         self.mnistTest = TensorDataset(self.mnistXTest, self.mnistYTest)
         self.cifarTest = TensorDataset(self.cifarXTest, self.cifarYTest)
 
+        # after we create the tensors we can do this
         self.mnistTrain, self.mnistValid = random_split(mnistTrain, [50000, 10000])
 
         self.cifarTrain, self.cifarValid = random_split(cifarTrain, [45000, 5000])
 
+    # abstract method the subclasses implement
     @abstractmethod
     def doModelCreation(self, complexity, dataset, sampledParams):
         pass
 
+    # We need to do this each hypertuning because the batch size is a hyeprparameter, so we cneed to create batches dynamically
     def createBatches(self, batchSize, dataset, doingFinalTrain):
-        
         if(dataset == "mnist"):
             if(doingFinalTrain):
                 mergedTrain = ConcatDataset([self.mnistTrain, self.mnistValid])
@@ -84,32 +90,42 @@ class Model(ABC):
                 self.trainBatch = DataLoader(self.cifarTrain, batch_size = batchSize, shuffle = True)
                 self.testBatch = DataLoader(self.cifarValid, batch_size = batchSize)
 
+    # this creates the model, calls the function for tuning, and does evaluation and returns the rutnime.
     def createFullModel(self, complexity, dataset, modelName):
         startTime = time.time() 
         tuneIterations = 11
         self.finalParams = {}
         highestAccuracy = 0
 
+        # hypertune using random search with about 11 iterations
         for _ in range(0, tuneIterations, 1):
+            #get a random search sample
             sampledParams = self.sampleParams()
 
+            # crate our model according to sampled parameters
             self.doModelCreation(complexity, dataset, sampledParams)
 
+            # create the batches
             self.createBatches(sampledParams["batchSize"], dataset, False)
 
+            # train and valuate this current model, get accuracy
             accuracy = self.currentModel.trainAndEvaluate(self.trainBatch, self.testBatch, False, self.device)
 
+            # keep the parameter set with the highest scores
             if(accuracy > highestAccuracy):
                 highestAccuracy = accuracy
                 self.finalParams = sampledParams
         
+        # do model createion again with the final parameters
         self.doModelCreation(complexity, dataset, self.finalParams)
 
+        # create batches again, but this time pass in doingFinalTrain = True to concatenate train and validation sets togethaa
         self.createBatches(self.finalParams["batchSize"], dataset, True)
+        # get accuracy to print
         accuracy = self.currentModel.trainAndEvaluate(self.trainBatch, self.testBatch, True, self.device)
 
+        # get end time from start of tuning to end of final model's training
         endTime = time.time()
-
         numMinutes = (endTime - startTime) / 60
         numSeconds = (endTime - startTime) % 60
 

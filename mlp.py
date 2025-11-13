@@ -31,6 +31,7 @@ class MLP_Manager(Model):
 
         self.createTensorsAndSplitting()
 
+    # actually creates the MLP model
     def doModelCreation(self, complexity, dataset, sampledParams):        
         # firest dimension is # of points, so the one after is the number of features
         if(dataset == "mnist"):
@@ -40,7 +41,7 @@ class MLP_Manager(Model):
         
         self.currentModel = MLP(complexity, numFeatures, **sampledParams).to(self.device)
 
-
+# MLP model class that will be made an instance of the manager class
 class MLP(nn.Module):
     def __init__(self, complexity, numFeatures, learningRate, optimizer, dropoutRate, batchSize):
         super().__init__()
@@ -49,11 +50,13 @@ class MLP(nn.Module):
         
         # do all the layers except for the finaln lyaer
         beforeHiddenLayerLength = -1
+        # if low, have one hidden layer and 128 perceptrons
         if(complexity == "low"):
             numPerceptrons = 128
             layers.append(nn.Linear(numFeatures, numPerceptrons))
             layers.append(nn.ReLU())
             beforeHiddenLayerLength = numPerceptrons
+        # if medium, have 3 hidden layers
         elif(complexity == "medium"):
             numPerceptronsFirst = 512
             numPerceptronsSecond = 256
@@ -67,6 +70,7 @@ class MLP(nn.Module):
             layers.append(nn.ReLU())
 
             beforeHiddenLayerLength = numPerceptronsThird
+        # if high complexity, have 6 hidden layers
         elif(complexity == "high"):
             numPerceptronsFirst = 1024
             numPerceptronsSecond = 512
@@ -90,7 +94,7 @@ class MLP(nn.Module):
 
             beforeHiddenLayerLength = numPerceptronsSixth
     
-        # apply dropout before the final layer
+        # apply dropout before the final layer. I assum here we also do it with low complexity
         layers.append(nn.Dropout(dropoutRate))
         
         # now do the final layer
@@ -101,20 +105,25 @@ class MLP(nn.Module):
 
         self.criterion = nn.CrossEntropyLoss()
 
+        # change optimizer based on whats passed 
         if(optimizer == "adam"):
             self.optimizer = optim.Adam(self.parameters(), lr = learningRate)
         else:
             self.optimizer = optim.SGD(self.parameters(), lr = learningRate)
 
+    # do forward pass to get results of the model
     def forward(self, x):
         return self.model(x)
 
+    # train the model and get its accuracy
     def trainAndEvaluate(self, trainSet, testSet, finalTrain, device):
+        # for validation, we jusdt use fewer epochhs
         if(finalTrain):
             numEpochs = 50
         else:
             numEpochs = 30
         
+        # run through all epochs
         for epoch in range(numEpochs):
             for batchX, batchY in trainSet:
                 batchX, batchY = batchX.to(device), batchY.to(device)
@@ -122,26 +131,34 @@ class MLP(nn.Module):
                 # zero out gradients
                 self.optimizer.zero_grad()
 
+                # get results
                 rawOutputs = self(batchX)
 
+                # get loss
                 loss = self.criterion(rawOutputs, batchY)
 
-                # do backward step
+                # do backward step to propogate the loss back to each perceptrion
                 loss.backward()
 
+                # compute new weights from the loss
                 self.optimizer.step()
 
         numCorrect = 0
         numTotal = 0
         with torch.no_grad():
+            # loop through all the batches for testing
             for batchX, batchY in testSet:
                 batchX, batchY = batchX.to(device), batchY.to(device)
+
+                # get results and output from them by taking the most likely one
                 output = self(batchX)
                 predictedOutputs = torch.argmax(output, dim = 1)
 
+                # for each value in the batch, get the outputs and compute how many were correct
                 for i in range(0, len(predictedOutputs), 1):
                     if(predictedOutputs[i] == batchY[i]):
                         numCorrect += 1
                     numTotal += 1
 
+        # get accuracy directly
         return numCorrect / numTotal
