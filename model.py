@@ -4,6 +4,7 @@ import random
 import time
 from torch.utils.data import TensorDataset, DataLoader, random_split, ConcatDataset
 import torch
+import numpy as np
 
 
 class Model(ABC):
@@ -91,42 +92,65 @@ class Model(ABC):
                 self.testBatch = DataLoader(self.cifarValid, batch_size = batchSize)
 
     # this creates the model, calls the function for tuning, and does evaluation and returns the rutnime.
-    def createFullModel(self, complexity, dataset, modelName):
-        startTime = time.time() 
-        tuneIterations = 11
-        self.finalParams = {}
-        highestAccuracy = 0
+    def doFullTuning(self, dataset, modelName):
+        complexities = ["low", "medium", "high"]
+        complexityAccuracies = np.zeros(3)
+        complexityParams = [{} for _ in range(3)]
 
-        # hypertune using random search with about 11 iterations
-        for _ in range(0, tuneIterations, 1):
-            #get a random search sample
-            sampledParams = self.sampleParams()
+        # get the best complexity too
+        for complexityIndex, complexity in enumerate(complexities):
+            startTime = time.time() 
+            tuneIterations = 11
+            finalParams = {}
+            highestAccuracy = 0
 
-            # crate our model according to sampled parameters
-            self.doModelCreation(complexity, dataset, sampledParams)
+            allTuneAccuracies = np.zeros(tuneIterations)
 
-            # create the batches
-            self.createBatches(sampledParams["batchSize"], dataset, False)
+            # hypertune using random search with about 11 iterations
+            for i in range(0, tuneIterations, 1):
+                #get a random search sample
+                sampledParams = self.sampleParams()
 
-            # train and valuate this current model, get accuracy
-            accuracy = self.currentModel.trainAndEvaluate(self.trainBatch, self.testBatch, False, self.device)
+                # crate our model according to sampled parameters
+                self.doModelCreation(complexity, dataset, sampledParams)
 
-            # keep the parameter set with the highest scores
-            if(accuracy > highestAccuracy):
-                highestAccuracy = accuracy
-                self.finalParams = sampledParams
+                # create the batches
+                self.createBatches(sampledParams["batchSize"], dataset, False)
+
+                # train and valuate this current model, get accuracy
+                accuracy = self.currentModel.trainAndEvaluate(self.trainBatch, self.testBatch, False, self.device)
+
+                # keep the parameter set with the highest scores
+                if(accuracy > highestAccuracy):
+                    highestAccuracy = accuracy
+                    finalParams = sampledParams
+                
+                allTuneAccuracies[i] = accuracy
+            
+
+            # get end time from start of tuning to end of final model's training
+            endTime = time.time()
+            numMinutes = (endTime - startTime) / 60
+            numSeconds = (endTime - startTime) % 60
+
+            meanAccForComplexity = np.mean(allTuneAccuracies)
+            deviationForComplexity = np.std(allTuneAccuracies)
+
+            print(f"Validation accuracy for {modelName} model with complexity of {complexity} and dataset of {dataset} was {meanAccForComplexity} with standard deviation of {deviationForComplexity}, while total elapsed time was {numMinutes} minutes and {numSeconds} seconds. Additionally, the parameters chosen were: {finalParams}")
+            complexityAccuracies[complexityIndex] = meanAccForComplexity
+            complexityParams[complexityIndex] = finalParams
         
+        bestComplexityIndex = np.argmax(complexityAccuracies, axis = 0)
+
+        self.finalComplexity = complexities[bestComplexityIndex]
+        self.trueFinalParams = complexityParams[bestComplexityIndex]
+
+    def doFinalEvaluation(self, dataset, modelName):
         # do model createion again with the final parameters
-        self.doModelCreation(complexity, dataset, self.finalParams)
+        self.doModelCreation(self.finalComplexity, dataset, self.trueFinalParams)
 
         # create batches again, but this time pass in doingFinalTrain = True to concatenate train and validation sets togethaa
-        self.createBatches(self.finalParams["batchSize"], dataset, True)
+        self.createBatches(self.trueFinalParams["batchSize"], dataset, True)
         # get accuracy to print
         accuracy = self.currentModel.trainAndEvaluate(self.trainBatch, self.testBatch, True, self.device)
-
-        # get end time from start of tuning to end of final model's training
-        endTime = time.time()
-        numMinutes = (endTime - startTime) / 60
-        numSeconds = (endTime - startTime) % 60
-
-        print(f"Accuracy for {modelName} model with complexity of {complexity} and dataset of {dataset} was {accuracy}, while total elapsed time was {numMinutes} minutes and {numSeconds} seconds. Additionally, the parameters chosen were: {self.finalParams}")
+        print(f"Test accuracy for {modelName} model with complexity of {self.finalComplexity} and dataset of {dataset} was {accuracy}. As a reminder, the parameters chosen were: {self.trueFinalParams}")
